@@ -1,4 +1,5 @@
 use bevy::{prelude::*};
+use num_traits::clamp;
 use rand::Rng;
 
 mod fish;
@@ -12,7 +13,7 @@ const FISHING_ROD_BAR_OVER_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 // const FISH_COLOR: Color = Color::srgba(0.5, 0.5, 1.0, 0.5);
 
 pub const BAR_EXTENTS: (f32, f32) = (-128.0, 128.0);
-const BAR_WIDTH:f32 = 32.0;
+const BAR_WIDTH: f32 = 32.0;
 const BASE_FISHING_ROD_BAR_SIZE: f32 = 64.0;
 
 const GRAVITY: f32 = -70.0;
@@ -23,6 +24,16 @@ const ZERO_VEL_THRESHOLD: f32 = 3.0;
 
 const FISH_CAPTURE_POINT: Vec2 = Vec2::new(0.0, 0.0);
 const INITIAL_FISH_Y: f32 = 0.0;
+
+const OVER_FILL_RATE: f32 = 0.1;
+const NOT_OVER_FILL_RATE: f32 = -0.05;
+
+const INITIAL_CATCH_FILL: f32 = 0.3;
+
+const PROGRESS_BAR_LOCATION: Vec2 = Vec2::new(600.0, 0.0);
+const PROGRESS_BAR_SIZE: Vec2 = Vec2::new(32.0, 500.0);
+const PROGRESS_BAR_BACKGROUND: Color = Color::srgb(128.0, 128.0, 128.0);
+const PROGRESS_BAR_PROGRESS: Color = Color::srgb(0.0, 1.0, 0.0);
 
 #[derive(Component, Default)]
 #[require(Sprite, Transform)]
@@ -45,7 +56,8 @@ struct OverFishEvent;
 #[derive(Component, Deref, DerefMut, Default)]
 struct VertSize(f32);
 
-
+#[derive(Resource, Deref, DerefMut)]
+pub struct CatchProgress(f32);
 
 
 fn main() {
@@ -53,6 +65,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_event::<OverFishEvent>()
+        .init_resource::<CatchProgress>()
         .add_systems(Startup, setup)
         .add_systems(
             FixedUpdate,
@@ -64,7 +77,7 @@ fn main() {
                         apply_y_velocity
                     ).chain()
         )
-        .add_systems(FixedUpdate, trigger_over_fish_event)
+        .add_systems(FixedUpdate, (trigger_over_fish_event, update_catch_progress).chain())
         .add_systems(Update, set_fishing_bar_color)
         .run();
 }
@@ -125,12 +138,16 @@ fn setup(
             ..default()
         }
     ));
-
 }
 
 // fn spawn_fish(fish_type: fish::FishType, fish_y: f32) {
 
 // }
+impl Default for CatchProgress{
+    fn default() -> Self {
+        Self(INITIAL_CATCH_FILL)
+    }
+}
 
 // uses VertSize of box to calculate against fish
 fn trigger_over_fish_event(
@@ -148,6 +165,18 @@ fn trigger_over_fish_event(
         {
             ev_overfish.write(OverFishEvent);
         }
+}
+
+fn update_catch_progress(
+    mut catch_progress: ResMut<CatchProgress>,
+    ev_overfish: EventReader<OverFishEvent>,
+    time: Res<Time>
+) {
+    let is_over = !ev_overfish.is_empty();
+    let fill_diff = if is_over {OVER_FILL_RATE * time.delta_secs()}
+        else {NOT_OVER_FILL_RATE * time.delta_secs()};
+    catch_progress.0 = clamp(catch_progress.0 + fill_diff, 0.0, 1.0);
+    // println!("{}", catch_progress.0 * 100.0);
 }
 
 fn set_fishing_bar_color(
