@@ -2,7 +2,10 @@ use bevy::{prelude::*};
 use num_traits::clamp;
 use rand::Rng;
 
+use crate::ui::{setup_ui, update_progress_bar_ui};
+
 mod fish;
+mod ui;
 
 const GAME_SCALE: Vec3 = Vec3::new(1.0, 1.0, 1.0);
 
@@ -29,11 +32,6 @@ const OVER_FILL_RATE: f32 = 0.1;
 const NOT_OVER_FILL_RATE: f32 = -0.05;
 
 const INITIAL_CATCH_FILL: f32 = 0.3;
-
-const PROGRESS_BAR_LOCATION: Vec2 = Vec2::new(600.0, 0.0);
-const PROGRESS_BAR_SIZE: Vec2 = Vec2::new(32.0, 500.0);
-const PROGRESS_BAR_BACKGROUND: Color = Color::srgb(128.0, 128.0, 128.0);
-const PROGRESS_BAR_PROGRESS: Color = Color::srgb(0.0, 1.0, 0.0);
 
 #[derive(Component, Default)]
 #[require(Sprite, Transform)]
@@ -66,7 +64,7 @@ fn main() {
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_event::<OverFishEvent>()
         .init_resource::<CatchProgress>()
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, ui::setup_ui).chain())
         .add_systems(
             FixedUpdate,
             (apply_gravity,
@@ -78,7 +76,7 @@ fn main() {
                     ).chain()
         )
         .add_systems(FixedUpdate, (trigger_over_fish_event, update_catch_progress).chain())
-        .add_systems(Update, set_fishing_bar_color)
+        .add_systems(Update, (set_fishing_bar_color, ui::update_progress_bar_ui))
         .run();
 }
 
