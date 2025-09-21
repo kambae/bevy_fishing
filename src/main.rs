@@ -1,4 +1,5 @@
 use bevy::{prelude::*};
+use rand::Rng;
 
 mod fish;
 
@@ -9,7 +10,7 @@ const BAR_COLOR: Color = Color::srgb(0.3, 0.3, 0.7);
 const FISHING_ROD_BAR_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 const FISH_COLOR: Color = Color::srgba(0.5, 0.5, 1.0, 0.5);
 
-const BAR_EXTENTS: (f32, f32) = (-128.0, 128.0);
+pub const BAR_EXTENTS: (f32, f32) = (-128.0, 128.0);
 const BAR_WIDTH:f32 = 32.0;
 const BASE_FISHING_ROD_BAR_SIZE: f32 = 64.0;
 
@@ -20,6 +21,7 @@ const BOUNCE_DAMPENING_FACTOR: f32 = 0.5;
 const ZERO_VEL_THRESHOLD: f32 = 3.0;
 
 const FISH_CAPTURE_POINT: Vec2 = Vec2::new(0.0, 0.0);
+const INITIAL_FISH_Y: f32 = 0.0;
 
 #[derive(Component, Default)]
 #[require(Sprite, Transform)]
@@ -28,16 +30,9 @@ struct Bar;
 #[derive(Component)]
 struct FishingRodBar;
 
-#[derive(Component)]
-#[require(Sprite, Transform, YVelocity)]
-struct Fish {
-    fish_behaviour: fish::FishBehaviour,
-    fish_speed: f32
-}
-
 #[derive(Component, Deref, DerefMut, Default)]
 #[require(Transform)]
-struct YVelocity(f32);
+pub struct YVelocity(f32);
 
 #[derive(Component)]
 #[require(YVelocity)]
@@ -56,7 +51,13 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             FixedUpdate,
-            (apply_gravity, apply_player_accel, handle_bar_bounce, apply_y_velocity).chain()
+            (apply_gravity,
+                        apply_player_accel,
+                        handle_bar_bounce,
+                        fish::fish_movement_system,
+                        fish::fish_handle_bar_edge,
+                        apply_y_velocity
+                    ).chain()
         )
         .run();
 }
@@ -95,7 +96,33 @@ fn setup(
         }
     ));
 
+    let mut rng = rand::rng();
+    // let fish_type: fish::FishType = rng.random();
+    // TODO: randomly pick
+    let fish_type = fish::FishType::Simple;
+    let fish_speed_range = fish_type.get_speed_range();
+    let fish_speed = rng.random_range(fish_speed_range.0..=fish_speed_range.1);
+    let sprite_path = fish_type.get_sprite_path();
+
+    
+    commands.spawn((
+        fish::Fish {
+            fish_behaviour: fish_type.get_behaviour_type(),
+            fish_speed: fish_speed
+        },
+        Sprite::from_image(assert_server.load(sprite_path)),
+        Transform {
+            translation: Vec3::new(0.0, INITIAL_FISH_Y, 2.0),
+            scale: GAME_SCALE,
+            ..default()
+        }
+    ));
+
 }
+
+// fn spawn_fish(fish_type: fish::FishType, fish_y: f32) {
+
+// }
 
 fn apply_gravity(
     mut gravity_query: Query<&mut YVelocity, With<GravityAffected>>,
@@ -112,7 +139,7 @@ fn apply_gravity(
 
 
 fn apply_player_accel(
-    mut bar_query: Single<&mut YVelocity, With<FishingRodBar>>,
+    bar_query: Single<&mut YVelocity, With<FishingRodBar>>,
     buttons: Res<ButtonInput<MouseButton>>,
     time: Res<Time>
 ) {
@@ -123,7 +150,7 @@ fn apply_player_accel(
 }
 
 fn handle_bar_bounce(
-    mut bar_query: Single<(&mut YVelocity, &mut Transform), With<FishingRodBar>>,
+    bar_query: Single<(&mut YVelocity, &mut Transform), With<FishingRodBar>>,
     time: Res<Time>
 ) {
     let (mut bar_y_vel, mut bar_transform) = bar_query.into_inner();
