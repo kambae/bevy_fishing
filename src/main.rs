@@ -8,7 +8,8 @@ const GAME_SCALE: Vec3 = Vec3::new(1.0, 1.0, 1.0);
 const BACKGROUND_COLOR: Color = Color::srgb(0.7, 0.7, 0.7);
 const BAR_COLOR: Color = Color::srgb(0.3, 0.3, 0.7);
 const FISHING_ROD_BAR_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
-const FISH_COLOR: Color = Color::srgba(0.5, 0.5, 1.0, 0.5);
+const FISHING_ROD_BAR_OVER_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
+// const FISH_COLOR: Color = Color::srgba(0.5, 0.5, 1.0, 0.5);
 
 pub const BAR_EXTENTS: (f32, f32) = (-128.0, 128.0);
 const BAR_WIDTH:f32 = 32.0;
@@ -39,7 +40,10 @@ pub struct YVelocity(f32);
 struct GravityAffected;
 
 #[derive(Event)]
-struct OverFish;
+struct OverFishEvent;
+
+#[derive(Component, Deref, DerefMut, Default)]
+struct VertSize(f32);
 
 
 
@@ -48,6 +52,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(ClearColor(BACKGROUND_COLOR))
+        .add_event::<OverFishEvent>()
         .add_systems(Startup, setup)
         .add_systems(
             FixedUpdate,
@@ -59,6 +64,8 @@ fn main() {
                         apply_y_velocity
                     ).chain()
         )
+        .add_systems(FixedUpdate, trigger_over_fish_event)
+        .add_systems(Update, set_fishing_bar_color)
         .run();
 }
 
@@ -93,7 +100,8 @@ fn setup(
             translation: Vec3::new(0.0, initial_fishing_bar_y, 1.0),
             scale: GAME_SCALE,
             ..default()
-        }
+        },
+        VertSize(BASE_FISHING_ROD_BAR_SIZE)
     ));
 
     let mut rng = rand::rng();
@@ -123,6 +131,36 @@ fn setup(
 // fn spawn_fish(fish_type: fish::FishType, fish_y: f32) {
 
 // }
+
+// uses VertSize of box to calculate against fish
+fn trigger_over_fish_event(
+    bar_query: Single<(&Transform, &VertSize), With<FishingRodBar>>,
+    fish_query: Single<&Transform, With<fish::Fish>>,
+    mut ev_overfish: EventWriter<OverFishEvent>
+) {
+    let (bar_transform, bar_vert_size) = bar_query.into_inner();
+    let fish_transform = fish_query.into_inner();
+    let bar_translation = bar_transform.translation;
+
+    let fish_check_point = fish_transform.translation.y + FISH_CAPTURE_POINT.y;
+    if (bar_translation.y - bar_vert_size.0 / 2.0 <= fish_check_point)
+        && (fish_check_point <= bar_translation.y + bar_vert_size.0 / 2.0)
+        {
+            ev_overfish.write(OverFishEvent);
+        }
+}
+
+fn set_fishing_bar_color(
+    bar_query: Single<&mut Sprite, With<FishingRodBar>>,
+    ev_overfish: EventReader<OverFishEvent>
+) {
+    let mut sprite = bar_query.into_inner();
+    if ev_overfish.is_empty() {
+        sprite.color = FISHING_ROD_BAR_COLOR;
+    } else {
+        sprite.color = FISHING_ROD_BAR_OVER_COLOR;
+    }
+}
 
 fn apply_gravity(
     mut gravity_query: Query<&mut YVelocity, With<GravityAffected>>,
